@@ -1,0 +1,17 @@
+services:
+  db:
+    image: mysql:8.0
+    ports:
+      - '${DATABASE_PORT:-3306}:3306'
+    volumes:
+      - mysql-data:/var/lib/mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DATABASE_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${DATABASE_NAME}
+      MYSQL_USER: ${DATABASE_USER}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD}
+    restart: always
+    container_name: petshop-mysql
+
+volumes:
+  mysql-data:
