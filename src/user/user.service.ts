@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
@@ -7,24 +7,40 @@ import { hash } from 'bcrypt';
 
 @Injectable()
 export class UserService {
+  private readonly saltRounds = 10;
+  private readonly logger = new Logger(UserService.name);
   constructor(private prisma: PrismaService) {}
 
-  private readonly saltRounds = 10;
-
   async create(createUserDto: CreateUserDto) {
-    const emailExists = await this.emailExists({ email: createUserDto.email });
-    if (emailExists) {
-      throw new HttpException('Email already exists', HttpStatus.BAD_REQUEST);
+    try {
+      const emailExists = await this.emailExists({
+        email: createUserDto.email,
+      });
+      if (emailExists) {
+        throw new HttpException('Email already exists', HttpStatus.BAD_REQUEST);
+      }
+
+      const hashedPassword = await hash(
+        createUserDto.password,
+        this.saltRounds,
+      );
+
+      const userData = {
+        ...createUserDto,
+        password: hashedPassword,
+      };
+
+      return await this.prisma.users.create({ data: userData });
+    } catch (error) {
+      this.logger.error('Error creating user', error as string);
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      throw new HttpException(
+        'Internal server error',
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
-
-    const hashedPassword = await hash(createUserDto.password, this.saltRounds);
-
-    const userData = {
-      ...createUserDto,
-      password: hashedPassword,
-    };
-
-    return await this.prisma.users.create({ data: userData });
   }
 
   async findAll() {
@@ -65,6 +81,7 @@ export class UserService {
       });
       return updatedUser;
     } catch (error: unknown) {
+      this.logger.error('Error updating user', error as string);
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2025'
@@ -80,6 +97,7 @@ export class UserService {
       const deleted = await this.prisma.users.delete({ where: { id } });
       return deleted;
     } catch (error: unknown) {
+      this.logger.error('Error deleting user', error as string);
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
         error.code === 'P2025'
