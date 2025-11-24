@@ -3,16 +3,28 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { Prisma } from 'generated/prisma/client';
+import { hash } from 'bcrypt';
 
 @Injectable()
 export class UserService {
   constructor(private prisma: PrismaService) {}
+
+  private readonly saltRounds = 10;
+
   async create(createUserDto: CreateUserDto) {
     const emailExists = await this.emailExists({ email: createUserDto.email });
     if (emailExists) {
       throw new HttpException('Email already exists', HttpStatus.BAD_REQUEST);
     }
-    return await this.prisma.users.create({ data: createUserDto });
+
+    const hashedPassword = await hash(createUserDto.password, this.saltRounds);
+
+    const userData = {
+      ...createUserDto,
+      password: hashedPassword,
+    };
+
+    return await this.prisma.users.create({ data: userData });
   }
 
   async findAll() {
@@ -24,23 +36,43 @@ export class UserService {
   }
 
   async update(id: number, updateUserDto: UpdateUserDto) {
-    if (updateUserDto.email) {
-      const emailExists = await this.emailExists({
-        email: updateUserDto.email,
-        id,
-      });
-      if (emailExists) {
-        throw new HttpException('Email already exists', HttpStatus.BAD_REQUEST);
+    try {
+      if (updateUserDto.email) {
+        const emailExists = await this.emailExists({
+          email: updateUserDto.email,
+          id,
+        });
+        if (emailExists) {
+          throw new HttpException(
+            'Email already exists',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
       }
+
+      if ('password' in updateUserDto) {
+        throw new HttpException(
+          'Password cannot be updated',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      delete updateUserDto.id;
+
+      const updatedUser = await this.prisma.users.update({
+        where: { id },
+        data: updateUserDto,
+      });
+      return updatedUser;
+    } catch (error: unknown) {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2025'
+      ) {
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      throw error;
     }
-
-    delete updateUserDto.id;
-
-    const updatedUser = await this.prisma.users.update({
-      where: { id },
-      data: updateUserDto,
-    });
-    return updatedUser;
   }
 
   async remove(id: number) {
