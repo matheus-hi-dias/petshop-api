@@ -1,9 +1,11 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { plainToInstance } from 'class-transformer';
 import { Prisma } from 'generated/prisma/client';
 import { CreateAppointmentDto } from './dto/create-appointment.dto';
 import { UpdateAppointmentDto } from './dto/update-appointment.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AppointmentFindAllQueryParams } from 'src/types/appointmentParams.interface';
+import { ReadAppointmentDto } from './dto/read-appointment.dto';
 
 @Injectable()
 export class AppointmentsService {
@@ -24,7 +26,7 @@ export class AppointmentsService {
           pet: true,
         },
       });
-      return appointment;
+      return plainToInstance(ReadAppointmentDto, appointment);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
@@ -39,7 +41,7 @@ export class AppointmentsService {
     }
   }
 
-  findAll(params: AppointmentFindAllQueryParams) {
+  async findAll(params: AppointmentFindAllQueryParams) {
     try {
       const searchParams = {};
 
@@ -55,10 +57,28 @@ export class AppointmentsService {
         searchParams['petId'] = Number(params.petId);
       }
 
-      const appointments = this.prismaService.appointments.findMany({
+      const appointments = await this.prismaService.appointments.findMany({
         where: searchParams,
+        select: {
+          id: true,
+          date: true,
+          service: true,
+          observation: true,
+          pet: {
+            select: {
+              id: true,
+              name: true,
+              species: true,
+              age: true,
+              weight: true,
+              observation: true,
+              userId: true,
+            },
+          },
+        },
       });
-      return appointments;
+
+      return plainToInstance(ReadAppointmentDto, appointments);
     } catch (error) {
       this.logger.error('Failed to find appointments', error);
       throw error;
@@ -68,18 +88,35 @@ export class AppointmentsService {
   async findOne(id: number) {
     const appointment = await this.prismaService.appointments.findUnique({
       where: { id },
+      select: {
+        id: true,
+        date: true,
+        service: true,
+        observation: true,
+        pet: {
+          select: {
+            id: true,
+            name: true,
+            species: true,
+            age: true,
+            weight: true,
+            observation: true,
+            userId: true,
+          },
+        },
+      },
     });
 
     if (!appointment) {
       throw new Error(`Appointment with ID ${id} not found.`);
     }
 
-    return appointment;
+    return plainToInstance(ReadAppointmentDto, appointment);
   }
 
-  update(id: number, updateAppointmentDto: UpdateAppointmentDto) {
+  async update(id: number, updateAppointmentDto: UpdateAppointmentDto) {
     try {
-      const appointment = this.prismaService.appointments.update({
+      const appointment = await this.prismaService.appointments.update({
         where: { id },
         data: {
           ...updateAppointmentDto,
@@ -90,10 +127,21 @@ export class AppointmentsService {
           date: true,
           service: true,
           observation: true,
-          pet: true,
+          pet: {
+            select: {
+              id: true,
+              name: true,
+              species: true,
+              age: true,
+              weight: true,
+              observation: true,
+              userId: true,
+            },
+          },
         },
       });
-      return appointment;
+
+      return plainToInstance(ReadAppointmentDto, appointment);
     } catch (error) {
       if (
         error instanceof Prisma.PrismaClientKnownRequestError &&
