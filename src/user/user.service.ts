@@ -1,8 +1,6 @@
 import { HttpException, HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { Prisma } from 'generated/prisma/client';
 import { hash } from 'bcrypt';
 
 @Injectable()
@@ -43,72 +41,19 @@ export class UserService {
     }
   }
 
-  async findAll() {
-    return await this.prisma.users.findMany();
+  async findOne(id: number) {
+    return await this.prisma.users.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        pets: true,
+      },
+    });
   }
 
-  findOne(id: number) {
-    return this.prisma.users.findUnique({ where: { id } });
-  }
-
-  async update(id: number, updateUserDto: UpdateUserDto) {
-    try {
-      if (updateUserDto.email) {
-        const emailExists = await this.emailExists({
-          email: updateUserDto.email,
-          id,
-        });
-        if (emailExists) {
-          throw new HttpException(
-            'Email already exists',
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      }
-
-      if ('password' in updateUserDto) {
-        throw new HttpException(
-          'Password cannot be updated',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-
-      delete updateUserDto.id;
-
-      const updatedUser = await this.prisma.users.update({
-        where: { id },
-        data: updateUserDto,
-      });
-      return updatedUser;
-    } catch (error: unknown) {
-      this.logger.error('Error updating user', error as string);
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      ) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-      }
-      throw error;
-    }
-  }
-
-  async remove(id: number) {
-    try {
-      const deleted = await this.prisma.users.delete({ where: { id } });
-      return deleted;
-    } catch (error: unknown) {
-      this.logger.error('Error deleting user', error as string);
-      if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
-        error.code === 'P2025'
-      ) {
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-      }
-      throw error;
-    }
-  }
-
-  private async searchByEmail(email: string) {
+  async searchByEmail(email: string) {
     return await this.prisma.users.findUnique({ where: { email } });
   }
 
